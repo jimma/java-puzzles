@@ -17,7 +17,6 @@
 
 package red.hat.puzzles;
 
-import org.agrona.UnsafeAccess;
 import org.openjdk.jmh.annotations.*;
 import org.openjdk.jmh.profile.LinuxPerfAsmProfiler;
 import org.openjdk.jmh.runner.Runner;
@@ -26,15 +25,18 @@ import org.openjdk.jmh.runner.options.Options;
 import org.openjdk.jmh.runner.options.OptionsBuilder;
 import sun.misc.Unsafe;
 
+import java.lang.reflect.Field;
+import java.security.AccessController;
+import java.security.PrivilegedExceptionAction;
 import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Shows Perf tools and JMH usage + Running with scissors with Unsafe is not always a Perf win :P
- *
- * NOTE:
- * - automatic blackhole on return
- * - DONT_INLINE work only on the higher level declaration
+ * Running with scissors with Unsafe is not always a Perf win
+ * <p>
+ * NOTE for non expert JMH users:
+ * - automatic blackhole on benchmark method return value
+ * - DONT_INLINE work only on the higher level declaration (not the inner ones too)
  */
 
 @State(Scope.Benchmark)
@@ -43,6 +45,28 @@ import java.util.concurrent.TimeUnit;
 @Warmup(iterations = 5, time = 1)
 @Measurement(iterations = 5, time = 1)
 public class ArrayFillBenchmark {
+
+    public static final Unsafe UNSAFE;
+
+    static {
+        Unsafe unsafe = null;
+        try {
+            final PrivilegedExceptionAction<Unsafe> action =
+                    () ->
+                    {
+                        final Field f = Unsafe.class.getDeclaredField("theUnsafe");
+                        f.setAccessible(true);
+
+                        return (Unsafe) f.get(null);
+                    };
+
+            unsafe = AccessController.doPrivileged(action);
+        } catch (final Exception ex) {
+
+        }
+
+        UNSAFE = unsafe;
+    }
 
     private byte[] bytes;
     private long[] longBytes;
@@ -81,7 +105,7 @@ public class ArrayFillBenchmark {
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
     public long[] handrolledReverse() {
-        //JVM can't recognize the IR pattern
+        //JVM can't recognize the IR pattern: it is very unlikely will be able to optimize it
         for (int i = bytes.length - 1; i >= 0; i--) {
             bytes[i] = b;
         }
@@ -92,6 +116,7 @@ public class ArrayFillBenchmark {
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
     public byte[] handrolled() {
+        //goooood boy this JVM
         for (int i = 0; i < bytes.length; i++) {
             bytes[i] = b;
         }
@@ -101,9 +126,9 @@ public class ArrayFillBenchmark {
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
     public byte[] maybeMemset() {
-        //it could be used Copy::fill_to_memory_atomic
+        //it could be used Copy::fill_to_memory_atomic due to offset alignment
         //https://github.com/JetBrains/jdk8u_hotspot/blob/master/src/share/vm/utilities/copy.cpp#L58
-        UnsafeAccess.UNSAFE.setMemory(bytes, Unsafe.ARRAY_BYTE_BASE_OFFSET, size, b);
+        UNSAFE.setMemory(bytes, Unsafe.ARRAY_BYTE_BASE_OFFSET, size, b);
         return bytes;
     }
 

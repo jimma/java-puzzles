@@ -2,15 +2,6 @@
 
 import java.util.logging.Logger;
 
-/**
- * This test is supposed to show the performance impact of 2 different code patterns.
- * {@link #wrongLog(long)} is supposed to be too big (its bytecode size) to be inlined and that's could be seen:
- * - inspecting the compilation log by running the application with -XX:+PrintCompilation -XX:+UnlockDiagnosticVMOptions -XX:+PrintInlining
- * - copying the source (that's why it is in the base package :P) into https://github.com/AdoptOpenJDK/jitwatch Sandbox and having fun with it
- * <p>
- * notes:
- * it uses an ancient and unsafe technique to avoid dead code removal, JMH would be better, but JitWatch's Sandbox is the main consumer of this.
- */
 public class SimpleInliningTest {
 
     /**
@@ -20,13 +11,13 @@ public class SimpleInliningTest {
     public static void main(String[] args) {
         long l = 0;
         long start = System.currentTimeMillis();
-        for (int i = 0; i < 1_000_0000; i++) {
+        for (int i = 0; i < 100_000_000; i++) {
             l = wrongLog(l);
         }
         long elapsed = System.currentTimeMillis() - start;
         System.out.println("wrong tooks " + elapsed);
         start = System.currentTimeMillis();
-        for (int i = 0; i < 1_000_0000; i++) {
+        for (int i = 0; i < 100_000_000; i++) {
             l = rightLog(l);
         }
         elapsed = System.currentTimeMillis() - start;
